@@ -1,113 +1,122 @@
-# Downloader de imagens do Mercado Livre
-# Feito em: 09/09/2025
-
-# --- Importações ---
-# ttkbootstrap pra deixar a janela bonita
-# threading pra fazer o download sem travar a tela
-# messagebox pra mostrar as caixinhas de erro/sucesso
+"""
+======================================================
+FRONTEND - INTERFACE GRÁFICA (GUI) DO DOWNLOADER
+======================================================
+"""
 import ttkbootstrap as ttk
 from ttkbootstrap.constants import *
 from tkinter import messagebox
 import threading
 import os
-# aqui eu puxo as funções do outro arquivo, o backend
 import backend
+import sys # NOVO: Para identificar o sistema operacional
+import subprocess
 
 class App:
-    # A classe principal que organiza a janela inteira
     def __init__(self, root):
         self.root = root
         self.root.title("Downloader de Imagens - Mercado Livre")
 
-        # um frame é tipo um container pra organizar as coisas dentro da janela
+        # NOVO: Variável para guardar o caminho do último download bem-sucedido
+        self.ultimo_caminho_salvo = None
+
         main_frame = ttk.Frame(self.root, padding="15")
-        main_frame.pack(fill=BOTH, expand=True) # fill=BOTH faz ele ocupar todo o espaço
+        main_frame.pack(fill=BOTH, expand=True)
 
-        # --- Elementos da Tela (Widgets) ---
-
-        # Campo pra colar a URL
+        # --- Widgets ---
         ttk.Label(main_frame, text="Link do Anúncio:").grid(row=0, column=0, sticky=W, padx=5, pady=5)
         self.url_entry = ttk.Entry(main_frame, width=50)
         self.url_entry.grid(row=0, column=1, sticky=EW, padx=5, pady=5)
 
-        # Campo pra dar nome pra pasta
         ttk.Label(main_frame, text="Nome da Pasta:").grid(row=1, column=0, sticky=W, padx=5, pady=5)
         self.pasta_entry = ttk.Entry(main_frame, width=50)
         self.pasta_entry.grid(row=1, column=1, sticky=EW, padx=5, pady=5)
         
-        # O botão principal. O 'command=' chama a função que eu defini pra começar o download
-        self.download_button = ttk.Button(main_frame, text="Baixar Imagens", command=self.iniciar_thread_download, bootstyle="primary")
-        self.download_button.grid(row=2, column=0, columnspan=2, pady=10, padx=5, sticky=EW)
+        # NOVO: Frame para agrupar os botões lado a lado
+        botoes_frame = ttk.Frame(main_frame)
+        botoes_frame.grid(row=2, column=0, columnspan=2, pady=10, padx=5, sticky=EW)
+
+        self.download_button = ttk.Button(botoes_frame, text="Baixar Imagens", command=self.iniciar_thread_download, bootstyle="primary")
+        self.download_button.pack(side=LEFT, expand=True, fill=X, padx=(0, 5))
         
-        # O texto que vai mudando pra mostrar o que tá acontecendo
+        # NOVO: Botão "Abrir Pasta"
+        self.abrir_pasta_button = ttk.Button(botoes_frame, text="Abrir Pasta", command=self.abrir_pasta_destino, bootstyle="secondary", state=DISABLED)
+        self.abrir_pasta_button.pack(side=LEFT, expand=True, fill=X, padx=(5, 0))
+        
         self.status_label = ttk.Label(main_frame, text="Status: Aguardando início...")
         self.status_label.grid(row=3, column=0, columnspan=2, sticky=W, padx=5, pady=5)
         
-        # macete pra coluna 1 (onde estão as caixas de texto) esticar junto com a janela
         main_frame.columnconfigure(1, weight=1)
+        botoes_frame.columnconfigure(0, weight=1)
+        botoes_frame.columnconfigure(1, weight=1)
+
+    # NOVO: Função para abrir a pasta de destino
+    def abrir_pasta_destino(self):
+        if self.ultimo_caminho_salvo:
+            # Garante que o caminho é absoluto para evitar erros
+            caminho_absoluto = os.path.abspath(self.ultimo_caminho_salvo)
+            try:
+                # Lógica para abrir a pasta dependendo do sistema operacional
+                if sys.platform == "win32":
+                    os.startfile(caminho_absoluto)
+                elif sys.platform == "darwin": # macOS
+                    subprocess.Popen(["open", caminho_absoluto])
+                else: # Linux
+                    subprocess.Popen(["xdg-open", caminho_absoluto])
+            except Exception as e:
+                messagebox.showerror("Erro", f"Não foi possível abrir a pasta.\nErro: {e}")
 
     def atualizar_status(self, texto):
-        # função pra conseguir mudar o texto de status lá de dentro da thread de download
         self.status_label.config(text=f"Status: {texto}")
 
     def iniciar_thread_download(self):
-        # Essa função é a que o botão chama. Ela só prepara as coisas e inicia a thread.
         url = self.url_entry.get()
         nome_pasta = self.pasta_entry.get()
 
-        # uma checagem simples pra ver se o usuário preencheu tudo
         if not url or not nome_pasta:
-            messagebox.showerror("Opa!", "Precisa preencher os dois campos, amigo.")
+            messagebox.showerror("Erro de Entrada", "Por favor, preencha todos os campos antes de continuar.")
             return
 
-        # desabilito o botao pra evitar que o usuário clique de novo e bugue tudo
         self.download_button.config(state=DISABLED)
-        
-        # AQUI A MÁGICA PRA NÃO TRAVAR A JANELA!
-        # Crio uma thread nova que vai rodar a função de download em segundo plano.
+        # ALTERADO: Desabilita o botão "Abrir Pasta" no início de um novo download
+        self.abrir_pasta_button.config(state=DISABLED) 
         thread = threading.Thread(target=self.executar_download, args=(url, nome_pasta))
-        thread.start() # aqui a thread começa a rodar
+        thread.start()
 
     def executar_download(self, url, nome_pasta):
-        # Essa função roda "por trás dos panos", na thread secundária.
         try:
-            FATOR_DE_AUMENTO = 2 # define o quanto a imagem vai ser aumentada
-            
-            # aqui eu chamo as funções que fazem o trabalho sujo, lá no backend.py
+            FATOR_DE_AUMENTO = 2
             links = backend.obter_links_de_imagens(url, self.atualizar_status)
-            
-            if not links: # se a lista de links vier vazia, deu ruim
-                self.atualizar_status("Não achei nenhuma imagem nesse link.")
-                messagebox.showinfo("Hmm...", "Não encontrei imagens válidas nesse anúncio.")
+            if not links:
+                self.atualizar_status("Nenhuma imagem encontrada ou erro na análise.")
+                messagebox.showinfo("Concluído", "Nenhuma imagem válida foi encontrada no anúncio.")
                 return
 
-            self.atualizar_status(f"Beleza, achei {len(links)} imagens. Baixando...")
-            
+            self.atualizar_status(f"Encontrei {len(links)} imagens. Iniciando download...")
             caminho_final = os.path.join("img", nome_pasta)
-            
             imagens_salvas = backend.baixar_redimensionar_e_salvar(links, caminho_final, FATOR_DE_AUMENTO, self.atualizar_status)
             
-            mensagem_final = f"{imagens_salvas} imagens salvas na pasta '{caminho_final}'"
-            self.atualizar_status(f"Prontinho! {mensagem_final}")
-            messagebox.showinfo("Sucesso!", f"Download terminado!\n\n{mensagem_final}")
+            mensagem_final = f"{imagens_salvas} imagens salvas em '{caminho_final}'"
+            self.atualizar_status(f"Concluído! {mensagem_final}")
+            messagebox.showinfo("Sucesso", f"Download concluído!\n\n{mensagem_final}")
+            
+            # ALTERADO: Guarda o caminho e habilita o botão após sucesso
+            if imagens_salvas > 0:
+                self.ultimo_caminho_salvo = caminho_final
+                self.abrir_pasta_button.config(state=NORMAL)
 
         except Exception as e:
-            # se der um erro muito feio, mostra essa mensagem
-            mensagem_erro = f"Deu um erro cabuloso: {e}"
+            mensagem_erro = f"Ocorreu um erro inesperado: {e}"
             self.atualizar_status(mensagem_erro)
-            messagebox.showerror("Vish...", f"Deu um erro inesperado no processo:\n\n{e}")
+            messagebox.showerror("Erro Fatal", f"Ocorreu um erro durante o processo:\n\n{e}")
         finally:
-            # o 'finally' é legal pq ele SEMPRE executa, dando certo ou errado.
-            # isso garante que o botão vai ser reativado no final.
             self.download_button.config(state=NORMAL)
+            # ALTERADO: Limpa os campos de texto no final do processo
+            self.url_entry.delete(0, END)
+            self.pasta_entry.delete(0, END)
+            self.atualizar_status("Pronto para o próximo download.")
 
-# --- Ponto de Partida do Programa ---
 if __name__ == "__main__":
-    # é aqui que o programa começa a rodar de verdade
-    
-    # LEMBRETE: É AQUI QUE EU ESCOLHO O TEMA! 
-    # 'litera' é legal, 'darkly' também é show.
     root = ttk.Window(themename="litera")
     app = App(root)
-    # o mainloop deixa a janela aberta, esperando a gente fazer alguma coisa
     root.mainloop()
