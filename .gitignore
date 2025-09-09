@@ -1,0 +1,30 @@
+# Arquivos de Cache e Bytecode do Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# Pastas de Ambiente Virtual (Virtual Environment)
+# Extre mamente importante ignorar.
+venv/
+env/
+.venv
+venv
+ENV
+
+# Arquivos de configuração de IDEs e editores de código
+.vscode/
+.idea/
+
+# Arquivos de Sistema Operacional
+.DS_Store
+Thumbs.db
+
+# Arquivos de credenciais e configuração local
+.env
+*.env
+
+# Pastas de distribuição e build
+build/
+dist/
+*.egg-info/
