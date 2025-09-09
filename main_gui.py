@@ -2,119 +2,112 @@
 ======================================================
 FRONTEND - INTERFACE GRÁFICA (GUI) DO DOWNLOADER
 ======================================================
+Versão com processamento em lote a partir de uma planilha Excel.
 """
 import ttkbootstrap as ttk
 from ttkbootstrap.constants import *
-from tkinter import messagebox
+from tkinter import messagebox, filedialog # NOVO: filedialog para abrir a janela de seleção de arquivo
 import threading
 import os
 import backend
-import sys # NOVO: Para identificar o sistema operacional
-import subprocess
+import pandas as pd # NOVO: Importamos a biblioteca Pandas
 
 class App:
     def __init__(self, root):
         self.root = root
-        self.root.title("Downloader de Imagens - Mercado Livre")
-
-        # NOVO: Variável para guardar o caminho do último download bem-sucedido
-        self.ultimo_caminho_salvo = None
-
+        self.root.title("Downloader de Imagens em Lote - Mercado Livre")
+        
         main_frame = ttk.Frame(self.root, padding="15")
         main_frame.pack(fill=BOTH, expand=True)
 
         # --- Widgets ---
-        ttk.Label(main_frame, text="Link do Anúncio:").grid(row=0, column=0, sticky=W, padx=5, pady=5)
-        self.url_entry = ttk.Entry(main_frame, width=50)
-        self.url_entry.grid(row=0, column=1, sticky=EW, padx=5, pady=5)
+        # ALTERADO: Removemos os campos de texto e criamos um botão principal
+        
+        instrucao_label = ttk.Label(main_frame, text="Clique no botão abaixo para selecionar sua planilha (.xlsx)", justify="center")
+        instrucao_label.pack(pady=(10, 5))
 
-        ttk.Label(main_frame, text="Nome da Pasta:").grid(row=1, column=0, sticky=W, padx=5, pady=5)
-        self.pasta_entry = ttk.Entry(main_frame, width=50)
-        self.pasta_entry.grid(row=1, column=1, sticky=EW, padx=5, pady=5)
+        self.load_button = ttk.Button(main_frame, text="Carregar Planilha...", command=self.carregar_planilha, bootstyle="primary")
+        self.load_button.pack(pady=10, padx=20, fill=X)
         
-        # NOVO: Frame para agrupar os botões lado a lado
-        botoes_frame = ttk.Frame(main_frame)
-        botoes_frame.grid(row=2, column=0, columnspan=2, pady=10, padx=5, sticky=EW)
+        self.status_label = ttk.Label(main_frame, text="Status: Aguardando planilha...")
+        self.status_label.pack(pady=(5, 10), fill=X)
 
-        self.download_button = ttk.Button(botoes_frame, text="Baixar Imagens", command=self.iniciar_thread_download, bootstyle="primary")
-        self.download_button.pack(side=LEFT, expand=True, fill=X, padx=(0, 5))
+    # NOVO: Função chamada pelo botão "Carregar Planilha..."
+    def carregar_planilha(self):
+        """Abre uma janela para o usuário selecionar o arquivo da planilha."""
+        # Abre a janela de diálogo para o usuário escolher um arquivo
+        filepath = filedialog.askopenfilename(
+            title="Selecione a planilha",
+            filetypes=[("Arquivos Excel", "*.xlsx"), ("Todos os arquivos", "*.*")]
+        )
         
-        # NOVO: Botão "Abrir Pasta"
-        self.abrir_pasta_button = ttk.Button(botoes_frame, text="Abrir Pasta", command=self.abrir_pasta_destino, bootstyle="secondary", state=DISABLED)
-        self.abrir_pasta_button.pack(side=LEFT, expand=True, fill=X, padx=(5, 0))
-        
-        self.status_label = ttk.Label(main_frame, text="Status: Aguardando início...")
-        self.status_label.grid(row=3, column=0, columnspan=2, sticky=W, padx=5, pady=5)
-        
-        main_frame.columnconfigure(1, weight=1)
-        botoes_frame.columnconfigure(0, weight=1)
-        botoes_frame.columnconfigure(1, weight=1)
+        # Se o usuário selecionou um arquivo (não clicou em cancelar)
+        if filepath:
+            self.load_button.config(state=DISABLED) # Desabilita o botão
+            # Inicia o processamento da planilha em uma nova thread
+            thread = threading.Thread(target=self.processar_planilha, args=(filepath,))
+            thread.start()
 
-    # NOVO: Função para abrir a pasta de destino
-    def abrir_pasta_destino(self):
-        if self.ultimo_caminho_salvo:
-            # Garante que o caminho é absoluto para evitar erros
-            caminho_absoluto = os.path.abspath(self.ultimo_caminho_salvo)
-            try:
-                # Lógica para abrir a pasta dependendo do sistema operacional
-                if sys.platform == "win32":
-                    os.startfile(caminho_absoluto)
-                elif sys.platform == "darwin": # macOS
-                    subprocess.Popen(["open", caminho_absoluto])
-                else: # Linux
-                    subprocess.Popen(["xdg-open", caminho_absoluto])
-            except Exception as e:
-                messagebox.showerror("Erro", f"Não foi possível abrir a pasta.\nErro: {e}")
+    # NOVO: A função que faz o trabalho pesado, rodando na thread
+    def processar_planilha(self, filepath):
+        """Lê a planilha e processa cada linha."""
+        try:
+            self.atualizar_status("Lendo a planilha...")
+            # Usa o Pandas para ler o arquivo Excel. Espera que as colunas se chamem 'Link' e 'NomePasta'
+            df = pd.read_excel(filepath)
+
+            total_linhas = len(df)
+            if total_linhas == 0:
+                self.atualizar_status("Planilha vazia.")
+                messagebox.showinfo("Aviso", "A planilha selecionada está vazia.")
+                return
+
+            # Itera sobre cada linha da planilha
+            for index, row in df.iterrows():
+                progresso_geral = f"Processando linha {index + 1} de {total_linhas}..."
+                self.atualizar_status(progresso_geral)
+
+                link_anuncio = row['Link']
+                nome_pasta = row['NomePasta']
+
+                # Verifica se a linha tem os dados necessários
+                if pd.isna(link_anuncio) or pd.isna(nome_pasta):
+                    print(f"Linha {index + 2} ignorada: dados incompletos.")
+                    continue
+
+                # Define um callback interno para atualizar o status com mais detalhes
+                def status_callback_interno(texto):
+                    self.atualizar_status(f"{progresso_geral} - {texto}")
+
+                # --- REUTILIZA NOSSO BACKEND ---
+                # A mágica acontece aqui: usamos as mesmas funções de antes para cada linha!
+                caminho_final = os.path.join("img", str(nome_pasta))
+                FATOR_DE_AUMENTO = 2
+                
+                links = backend.obter_links_de_imagens(link_anuncio, status_callback_interno)
+                if links:
+                    backend.baixar_redimensionar_e_salvar(links, caminho_final, FATOR_DE_AUMENTO, status_callback_interno)
+            
+            self.atualizar_status("Processamento da planilha concluído!")
+            messagebox.showinfo("Sucesso", f"Todas as {total_linhas} linhas da planilha foram processadas.")
+
+        except KeyError:
+            # Erro comum se os nomes das colunas estiverem errados
+            mensagem_erro = "Erro: A planilha deve ter as colunas 'Link' e 'NomePasta'."
+            self.atualizar_status(mensagem_erro)
+            messagebox.showerror("Erro de Formato", mensagem_erro)
+        except Exception as e:
+            # Captura outros erros
+            mensagem_erro = f"Ocorreu um erro: {e}"
+            self.atualizar_status(mensagem_erro)
+            messagebox.showerror("Erro Fatal", mensagem_erro)
+        finally:
+            # Reabilita o botão no final, independentemente de sucesso ou erro
+            self.load_button.config(state=NORMAL)
 
     def atualizar_status(self, texto):
         self.status_label.config(text=f"Status: {texto}")
 
-    def iniciar_thread_download(self):
-        url = self.url_entry.get()
-        nome_pasta = self.pasta_entry.get()
-
-        if not url or not nome_pasta:
-            messagebox.showerror("Erro de Entrada", "Por favor, preencha todos os campos antes de continuar.")
-            return
-
-        self.download_button.config(state=DISABLED)
-        # ALTERADO: Desabilita o botão "Abrir Pasta" no início de um novo download
-        self.abrir_pasta_button.config(state=DISABLED) 
-        thread = threading.Thread(target=self.executar_download, args=(url, nome_pasta))
-        thread.start()
-
-    def executar_download(self, url, nome_pasta):
-        try:
-            FATOR_DE_AUMENTO = 2
-            links = backend.obter_links_de_imagens(url, self.atualizar_status)
-            if not links:
-                self.atualizar_status("Nenhuma imagem encontrada ou erro na análise.")
-                messagebox.showinfo("Concluído", "Nenhuma imagem válida foi encontrada no anúncio.")
-                return
-
-            self.atualizar_status(f"Encontrei {len(links)} imagens. Iniciando download...")
-            caminho_final = os.path.join("img", nome_pasta)
-            imagens_salvas = backend.baixar_redimensionar_e_salvar(links, caminho_final, FATOR_DE_AUMENTO, self.atualizar_status)
-            
-            mensagem_final = f"{imagens_salvas} imagens salvas em '{caminho_final}'"
-            self.atualizar_status(f"Concluído! {mensagem_final}")
-            messagebox.showinfo("Sucesso", f"Download concluído!\n\n{mensagem_final}")
-            
-            # ALTERADO: Guarda o caminho e habilita o botão após sucesso
-            if imagens_salvas > 0:
-                self.ultimo_caminho_salvo = caminho_final
-                self.abrir_pasta_button.config(state=NORMAL)
-
-        except Exception as e:
-            mensagem_erro = f"Ocorreu um erro inesperado: {e}"
-            self.atualizar_status(mensagem_erro)
-            messagebox.showerror("Erro Fatal", f"Ocorreu um erro durante o processo:\n\n{e}")
-        finally:
-            self.download_button.config(state=NORMAL)
-            # ALTERADO: Limpa os campos de texto no final do processo
-            self.url_entry.delete(0, END)
-            self.pasta_entry.delete(0, END)
-            self.atualizar_status("Pronto para o próximo download.")
 
 if __name__ == "__main__":
     root = ttk.Window(themename="litera")

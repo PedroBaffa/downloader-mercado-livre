@@ -1,4 +1,5 @@
 # Arquivos de Cache e Bytecode do Python
+img
 __pycache__/
 *.pyc
 *.pyo
