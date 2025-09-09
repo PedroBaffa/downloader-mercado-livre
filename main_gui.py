@@ -1,143 +1,113 @@
-"""
-======================================================
-FRONTEND - INTERFACE GRÁFICA (GUI) DO DOWNLOADER
-======================================================
+# Downloader de imagens do Mercado Livre
+# Feito em: 09/09/2025
 
-Este arquivo é responsável por criar e gerenciar a interface gráfica do usuário (GUI)
-para a aplicação de download de imagens. Ele utiliza a biblioteca Tkinter.
-
-Sua função é apresentar os controles ao usuário (campos de texto, botão) e
-delegar todo o trabalho de lógica para o módulo 'backend.py'.
-
-Dependências:
-- backend.py (deve estar na mesma pasta)
-"""
-
-# --- Importações necessárias para o front-end ---
-import tkinter as tk
-from tkinter import ttk, messagebox
+# --- Importações ---
+# ttkbootstrap pra deixar a janela bonita
+# threading pra fazer o download sem travar a tela
+# messagebox pra mostrar as caixinhas de erro/sucesso
+import ttkbootstrap as ttk
+from ttkbootstrap.constants import *
+from tkinter import messagebox
 import threading
 import os
-# Importamos nosso outro arquivo, tratando-o como uma biblioteca de ferramentas
+# aqui eu puxo as funções do outro arquivo, o backend
 import backend
 
 class App:
-    """
-    A classe principal que encapsula todos os elementos e comportamentos
-    da nossa janela gráfica.
-    """
+    # A classe principal que organiza a janela inteira
     def __init__(self, root):
-        """
-        O construtor da nossa aplicação. É executado quando a App é criada
-        e é responsável por montar a janela inicial.
-        """
         self.root = root
         self.root.title("Downloader de Imagens - Mercado Livre")
-        self.root.geometry("500x200")  # Define o tamanho inicial da janela
 
-        # Usamos 'ttk' para dar um visual um pouco mais moderno aos widgets
-        style = ttk.Style()
-        style.configure("TLabel", padding=5, font=('Helvetica', 10))
-        style.configure("TEntry", padding=5, font=('Helvetica', 10))
-        style.configure("TButton", padding=5, font=('Helvetica', 10, 'bold'))
+        # um frame é tipo um container pra organizar as coisas dentro da janela
+        main_frame = ttk.Frame(self.root, padding="15")
+        main_frame.pack(fill=BOTH, expand=True) # fill=BOTH faz ele ocupar todo o espaço
 
-        # O 'Frame' é como um container para organizar os outros elementos dentro da janela
-        main_frame = ttk.Frame(self.root, padding="10")
-        main_frame.pack(fill=tk.BOTH, expand=True)
+        # --- Elementos da Tela (Widgets) ---
 
-        # --- Criação dos Widgets (elementos da tela) ---
-
-        # Rótulo e campo de entrada para a URL
-        ttk.Label(main_frame, text="Link do Anúncio:").grid(row=0, column=0, sticky=tk.W)
+        # Campo pra colar a URL
+        ttk.Label(main_frame, text="Link do Anúncio:").grid(row=0, column=0, sticky=W, padx=5, pady=5)
         self.url_entry = ttk.Entry(main_frame, width=50)
-        self.url_entry.grid(row=0, column=1, sticky=tk.EW)
+        self.url_entry.grid(row=0, column=1, sticky=EW, padx=5, pady=5)
 
-        # Rótulo e campo de entrada para o Nome da Pasta
-        ttk.Label(main_frame, text="Nome da Pasta:").grid(row=1, column=0, sticky=tk.W)
+        # Campo pra dar nome pra pasta
+        ttk.Label(main_frame, text="Nome da Pasta:").grid(row=1, column=0, sticky=W, padx=5, pady=5)
         self.pasta_entry = ttk.Entry(main_frame, width=50)
-        self.pasta_entry.grid(row=1, column=1, sticky=tk.EW)
+        self.pasta_entry.grid(row=1, column=1, sticky=EW, padx=5, pady=5)
         
-        # Botão que o usuário clica para iniciar o download
-        # O 'command' especifica qual função será chamada quando o botão for pressionado
-        self.download_button = ttk.Button(main_frame, text="Baixar Imagens", command=self.iniciar_thread_download)
-        self.download_button.grid(row=2, column=0, columnspan=2, pady=10)
+        # O botão principal. O 'command=' chama a função que eu defini pra começar o download
+        self.download_button = ttk.Button(main_frame, text="Baixar Imagens", command=self.iniciar_thread_download, bootstyle="primary")
+        self.download_button.grid(row=2, column=0, columnspan=2, pady=10, padx=5, sticky=EW)
         
-        # Rótulo de texto que usaremos para mostrar o progresso
+        # O texto que vai mudando pra mostrar o que tá acontecendo
         self.status_label = ttk.Label(main_frame, text="Status: Aguardando início...")
-        self.status_label.grid(row=3, column=0, columnspan=2, sticky=tk.W, pady=5)
+        self.status_label.grid(row=3, column=0, columnspan=2, sticky=W, padx=5, pady=5)
         
-        # Faz com que a coluna das caixas de texto se expanda se a janela for redimensionada
+        # macete pra coluna 1 (onde estão as caixas de texto) esticar junto com a janela
         main_frame.columnconfigure(1, weight=1)
 
     def atualizar_status(self, texto):
-        """
-        Atualiza de forma segura o texto da label de status.
-        Esta função é essencial para que a thread do backend possa se comunicar
-        com a janela do front-end sem causar erros.
-        """
+        # função pra conseguir mudar o texto de status lá de dentro da thread de download
         self.status_label.config(text=f"Status: {texto}")
 
     def iniciar_thread_download(self):
-        """
-        Esta função é chamada pelo clique do botão. Ela pega os dados da tela
-        e inicia a lógica de download em uma nova thread para não travar a interface.
-        """
+        # Essa função é a que o botão chama. Ela só prepara as coisas e inicia a thread.
         url = self.url_entry.get()
         nome_pasta = self.pasta_entry.get()
 
-        # Validação simples para garantir que os campos não estão vazios
+        # uma checagem simples pra ver se o usuário preencheu tudo
         if not url or not nome_pasta:
-            messagebox.showerror("Erro de Entrada", "Por favor, preencha todos os campos antes de continuar.")
+            messagebox.showerror("Opa!", "Precisa preencher os dois campos, amigo.")
             return
 
-        # Desabilita o botão para que o usuário não possa clicar de novo enquanto um download está em andamento
-        self.download_button.config(state=tk.DISABLED)
+        # desabilito o botao pra evitar que o usuário clique de novo e bugue tudo
+        self.download_button.config(state=DISABLED)
         
-        # Cria a thread secundária, dizendo a ela para executar a função 'self.executar_download'
+        # AQUI A MÁGICA PRA NÃO TRAVAR A JANELA!
+        # Crio uma thread nova que vai rodar a função de download em segundo plano.
         thread = threading.Thread(target=self.executar_download, args=(url, nome_pasta))
-        thread.start() # Inicia a execução da thread em segundo plano
+        thread.start() # aqui a thread começa a rodar
 
     def executar_download(self, url, nome_pasta):
-        """
-        Esta função é executada na thread secundária. Ela chama as funções do
-        módulo 'backend' para fazer todo o trabalho pesado.
-        """
+        # Essa função roda "por trás dos panos", na thread secundária.
         try:
-            FATOR_DE_AUMENTO = 2
+            FATOR_DE_AUMENTO = 2 # define o quanto a imagem vai ser aumentada
             
-            # Chama a função do backend, passando 'self.atualizar_status' como o callback
+            # aqui eu chamo as funções que fazem o trabalho sujo, lá no backend.py
             links = backend.obter_links_de_imagens(url, self.atualizar_status)
             
-            if not links:
-                self.atualizar_status("Nenhuma imagem encontrada ou erro na análise.")
-                messagebox.showinfo("Concluído", "Nenhuma imagem válida foi encontrada no anúncio.")
+            if not links: # se a lista de links vier vazia, deu ruim
+                self.atualizar_status("Não achei nenhuma imagem nesse link.")
+                messagebox.showinfo("Hmm...", "Não encontrei imagens válidas nesse anúncio.")
                 return
 
-            self.atualizar_status(f"Encontrei {len(links)} imagens. Iniciando download...")
+            self.atualizar_status(f"Beleza, achei {len(links)} imagens. Baixando...")
             
             caminho_final = os.path.join("img", nome_pasta)
             
-            # Chama a segunda função do backend para baixar e processar as imagens
             imagens_salvas = backend.baixar_redimensionar_e_salvar(links, caminho_final, FATOR_DE_AUMENTO, self.atualizar_status)
             
-            mensagem_final = f"{imagens_salvas} imagens salvas em '{caminho_final}'"
-            self.atualizar_status(f"Concluído! {mensagem_final}")
-            messagebox.showinfo("Sucesso", f"Download concluído!\n\n{mensagem_final}")
+            mensagem_final = f"{imagens_salvas} imagens salvas na pasta '{caminho_final}'"
+            self.atualizar_status(f"Prontinho! {mensagem_final}")
+            messagebox.showinfo("Sucesso!", f"Download terminado!\n\n{mensagem_final}")
 
         except Exception as e:
-            # Captura qualquer erro inesperado e exibe uma mensagem
-            mensagem_erro = f"Ocorreu um erro inesperado: {e}"
+            # se der um erro muito feio, mostra essa mensagem
+            mensagem_erro = f"Deu um erro cabuloso: {e}"
             self.atualizar_status(mensagem_erro)
-            messagebox.showerror("Erro Fatal", f"Ocorreu um erro durante o processo:\n\n{e}")
+            messagebox.showerror("Vish...", f"Deu um erro inesperado no processo:\n\n{e}")
         finally:
-            # O bloco 'finally' sempre é executado, independentemente de ter dado sucesso ou erro.
-            # Usamos isso para garantir que o botão seja reabilitado no final.
-            self.download_button.config(state=tk.NORMAL)
+            # o 'finally' é legal pq ele SEMPRE executa, dando certo ou errado.
+            # isso garante que o botão vai ser reativado no final.
+            self.download_button.config(state=NORMAL)
 
-
-# --- BLOCO DE EXECUÇÃO PRINCIPAL ---
-# Este código só roda quando executamos este arquivo diretamente.
+# --- Ponto de Partida do Programa ---
 if __name__ == "__main__":
-    root = tk.Tk()      # 1. Cria a janela principal em branco
-    app = App(root)     # 2. Cria uma instância da nossa classe App, passando a janela para ela montar os widgets
-    root.mainloop()     # 3. Inicia o loop da aplicação, que mantém a janela aberta e esperando por ações do usuário
+    # é aqui que o programa começa a rodar de verdade
+    
+    # LEMBRETE: É AQUI QUE EU ESCOLHO O TEMA! 
+    # 'litera' é legal, 'darkly' também é show.
+    root = ttk.Window(themename="litera")
+    app = App(root)
+    # o mainloop deixa a janela aberta, esperando a gente fazer alguma coisa
+    root.mainloop()
