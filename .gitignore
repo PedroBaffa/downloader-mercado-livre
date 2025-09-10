@@ -1,9 +1,10 @@
 # Arquivos de Cache e Bytecode do Python
-img
 __pycache__/
 *.pyc
 *.pyo
 *.pyd
+img
+planilhas
 
 # Pastas de Ambiente Virtual (Virtual Environment)
 # Extre mamente importante ignorar.
